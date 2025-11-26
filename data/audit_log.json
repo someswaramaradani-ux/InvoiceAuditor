@@ -1,0 +1,9 @@
+[
+  {
+    "invoice_id": "INV-0001",
+    "action": "approve",
+    "reviewer": "alice@example.com",
+    "time": "2025-11-26T05:14:30.574729",
+    "feedback_path": "/Users/someswararaomaradani/IdeaProjects/InvoiceAuditor/data/feedback/INV-0001.feedback.json"
+  }
+]

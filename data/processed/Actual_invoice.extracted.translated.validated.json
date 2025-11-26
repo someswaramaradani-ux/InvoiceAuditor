@@ -1,0 +1,47 @@
+{
+  "structured": {
+    "invoice_number": "INV-0001",
+    "date": null,
+    "vendor": "ACME Co.",
+    "vendor_id": null,
+    "currency": "USD",
+    "total": "100.00",
+    "lines": [
+      {
+        "item_code": "SKU-1",
+        "description": "Widget",
+        "qty": 2,
+        "unit_price": 25.0,
+        "total": 50.0
+      },
+      {
+        "item_code": "SKU-2",
+        "description": "Service",
+        "qty": 1,
+        "unit_price": 50.0,
+        "total": 50.0
+      }
+    ]
+  },
+  "problems": [
+    {
+      "code": "missing_field",
+      "field": "header",
+      "severity": "MED",
+      "message": "headeris missing"
+    },
+    {
+      "code": "missing_field",
+      "field": "line_item",
+      "severity": "MED",
+      "message": "line_itemis missing"
+    },
+    {
+      "code": "missing_invoice_number",
+      "field": "invoice_number",
+      "severity": "MED",
+      "message": "Missing invoice_number"
+    }
+  ],
+  "llm_suggestion": "Approve"
+}

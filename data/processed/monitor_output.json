@@ -1,0 +1,20 @@
+{
+  "files": [
+    {
+      "path": "data/incoming/INV_DE_004.pdf",
+      "name": "INV_DE_004.pdf"
+    },
+    {
+      "path": "data/incoming/.DS_Store",
+      "name": ".DS_Store"
+    },
+    {
+      "path": "data/incoming/INV_DE_004.meta.json",
+      "name": "INV_DE_004.meta.json"
+    },
+    {
+      "path": "data/incoming/Actual_invoice.pdf",
+      "name": "Actual_invoice.pdf"
+    }
+  ]
+}

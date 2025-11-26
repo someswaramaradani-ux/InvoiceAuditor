@@ -1,0 +1,12 @@
+{
+  "source": "data/incoming/INV_DE_004.pdf",
+  "raw_text": "HafenLogistik GmbH\nAm Kai 55, Hamburg, Deutschland\nRechnungsnummer: RE-2025-004\nRechnungsdatum: 02.05.2025\nBestellnummer: PO-1004\n-------------------------------------------------\nArtikelcode | Beschreibung | Menge | Preis | Gesamt\n-------------------------------------------------\nSKU-301 | Transportkisten | 40 | 25.00\u20ac| 1000.00\u20ac\nSKU-302 | Sicherheitswesten | 60 | 10.00\u20ac| 600.00\u20ac\n-------------------------------------------------\nZwischensumme: 1600.00\u20ac\nMwSt (10%): 160.00\u20ac\nGesamtbetrag: 1760.00\u20ac\n-------------------------------------------------\n",
+  "structured": {
+    "invoice_number": null,
+    "date": null,
+    "vendor": null,
+    "currency": null,
+    "total": null,
+    "lines": []
+  }
+}

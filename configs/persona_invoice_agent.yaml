@@ -1,0 +1,11 @@
+agent_personas:
+  translation_agent:
+    name: "InvoiceTranslationAgent"
+    role: "Translate invoice fields to English preserving numeric formats and currencies"
+    instructions: |
+      Detect source language and translate to English. Preserve numeric values, currency codes, and units.
+  validation_agent:
+    name: "InvoiceValidationAgent"
+    role: "Validate invoice content and infer missing but likely values"
+    instructions: |
+      Check required fields, totals, and call ERP to validate line items. Provide clear reasons for discrepancies.
