@@ -22,9 +22,7 @@ import litellm
 
 PROCESSED = Path("data/processed")
 PROCESSED.mkdir(parents=True, exist_ok=True)
-os.environ["AZURE_API_KEY"] = "DlhDNymCqKd38q4jlKAriKy4xZZHRUxtyB3issd5ETpaLNsW4bLAJQQJ99BLACYeBjFXJ3w3AAABACOGLPZx"
-os.environ["AZURE_API_BASE"] = "https://somesh.openai.azure.com/"
-os.environ["HF_TOKEN"] = "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"
+
 def extract_text_from_pdf(path):
     text = ""
     with pdfplumber.open(path) as pdf:
@@ -55,7 +53,7 @@ def simple_parse_fields(text):
     return d
 
 def ingest_invoice(state: InvoiceProcessingState) -> Dict:
-    # Logic: Monitor /data/incoming, move file, update path and status.
+    #Logic: Monitor /data/incoming, move file, update path and status.
     AUDITOR_LOGGER.info(f"Node: ingest_invoice | Starting ingestion for {state['file_name']}")
     #print(f"--- 1. Ingesting: {state['file_name']}")
     return {"status": "PROCESSING", "raw_text": "Simulated raw text from invoice."}
