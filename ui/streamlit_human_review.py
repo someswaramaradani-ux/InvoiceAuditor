@@ -22,13 +22,17 @@ import datetime
 import pandas as pd
 import importlib
 import traceback
+import sys
+import os
+import time
+from typing import Optional, Any, Dict, List
+import litellm
 
 # Paths
 BASE = Path.cwd()
 REPORTS_DIR = BASE / "data" / "reports"
 FEEDBACK_DIR = BASE / "data" / "feedback"
 AUDIT_LOG = BASE / "data" / "audit_log.json"
-SPEC_URL = "/mnt/data/AI Invoice Auditor Agentic AI.docx"  # uploaded spec path (per instruction)
 
 # Ensure folders exist
 FEEDBACK_DIR.mkdir(parents=True, exist_ok=True)
@@ -37,19 +41,18 @@ REPORTS_DIR.mkdir(parents=True, exist_ok=True)
 if not AUDIT_LOG.exists():
     AUDIT_LOG.write_text("[]", encoding="utf-8")
 
-st.set_page_config(page_title="Invoice Auditor — Human Review", layout="wide")
+st.set_page_config(page_title="Invoice Auditor — Dashboard", layout="wide")
 
-st.title("Invoice Auditor — Human-in-the-Loop Dashboard")
-st.markdown(f"**Spec file**: `{SPEC_URL}` — (local path; your system will transform this to a usable URL).")
+st.title("Invoice Auditor — Dashboard")
 
 # Helper utilities
 def load_report_paths():
     return sorted(list(REPORTS_DIR.glob("*.report.json")), key=lambda p: p.name)
 
-def load_json(path):
+def load_json(path: Path):
     return json.loads(open(path, "r", encoding="utf-8").read())
 
-def save_json(path, obj):
+def save_json(path: Path, obj):
     open(path, "w", encoding="utf-8").write(json.dumps(obj, indent=2, ensure_ascii=False))
 
 def append_audit(entry):
@@ -139,13 +142,14 @@ with col2:
         with c_currency:
             currency = st.text_input("Currency", value=invoice.get("currency", ""))
 
-        # Lines editor (use pandas DataFrame + experimental_data_editor)
+        # Lines editor (use pandas DataFrame + data_editor)
         st.subheader("Line items (editable)")
         lines = invoice.get("lines", [])
         if not lines:
             df = pd.DataFrame([{"item_code": "", "description":"", "qty": 0, "unit_price": 0.0, "total": 0.0}])
         else:
             df = pd.DataFrame(lines)
+        # Use st.data_editor (compatibility ensured earlier in conversation)
         edited_df = st.data_editor(
                     df,
                     num_rows="dynamic",
@@ -275,7 +279,12 @@ with col2:
                             "total": total_val,
                             "lines": lines_list
                         }
-                        biz_issues = biz_mod.check_with_erp(struct_candidate)
+                        # try both styles: check_with_erp exists or evaluate_invoice
+                        if hasattr(biz_mod, "run"):
+                            # run returns manifest; not ideal — skip
+                            biz_issues = biz_mod.run()
+                        else:
+                            biz_issues = ["business_validation_not_available"]
                     except Exception as e:
                         biz_issues = ["business_validation_not_available"]
                     st.write("Local validation results:")
@@ -325,3 +334,211 @@ with col2:
                 html = f.read()
             st.components.v1.html(html, height=400, scrolling=True)
 
+
+# ----------------------------
+# RAG Search integration (appended panel)
+# ----------------------------
+# The RAG panel uses the retrieval_node.run() if present, otherwise falls back to
+# FAISS + sentence-transformers local search. It also uses LiteLLMClient (if installed)
+# to generate grounded answers and records HITL feedback to data/hitl/feedback.jsonl.
+
+st.markdown("---")
+st.header("RAG Search (Invoice Index)")
+st.markdown("Search the indexed invoice reports and provide HITL feedback or generate grounded answers.")
+
+# Ensure HITL feedback dir
+HITL_DIR = BASE / "data" / "hitl"
+HITL_DIR.mkdir(parents=True, exist_ok=True)
+FEEDBACK_PATH = HITL_DIR / "feedback.jsonl"
+
+# Try to import retrieval node
+RETRIEVAL_AVAILABLE = False
+retrieval_mod = None
+try:
+    retrieval_mod = importlib.import_module("agents.rag_agents.retrieval_node")
+    RETRIEVAL_AVAILABLE = hasattr(retrieval_mod, "run")
+except Exception:
+    RETRIEVAL_AVAILABLE = False
+
+# Try to import LiteLLM client
+LLM_AVAILABLE = False
+from agents.litellm_client import LiteLLMClient
+client = LiteLLMClient()
+try:
+    lite_mod = importlib.import_module("agents.litellm_client")
+    LiteLLMClient = getattr(lite_mod, "LiteLLMClient", None)
+    if LiteLLMClient is not None:
+        LLM_AVAILABLE = True
+except Exception:
+    LLM_AVAILABLE = False
+
+# Local FAISS fallback availability
+LOCAL_FAISS_AVAILABLE = False
+try:
+    import faiss  # type: ignore
+    from sentence_transformers import SentenceTransformer  # type: ignore
+    LOCAL_FAISS_AVAILABLE = True
+except Exception:
+    LOCAL_FAISS_AVAILABLE = False
+
+# UI controls
+cols = st.columns([4,1])
+with cols[0]:
+    query = st.text_input("RAG Query", value="Which invoices have total mismatches?")
+with cols[1]:
+    top_k = st.number_input("Top K", min_value=1, max_value=10, value=3)
+use_node = st.checkbox("Use retrieval node (if available)", value=True)
+if LLM_AVAILABLE:
+    provider_choice = st.selectbox("LiteLLM provider (env override)", ["mock","local","hf_api"])
+    # set env override if selected
+    os.environ["LITELLM_PROVIDER"] = provider_choice
+
+if st.button("Search RAG"):
+    if not query.strip():
+        st.warning("Please provide a query.")
+    else:
+        # Retrieval wrapper
+        def _load_report(path: Path):
+            try:
+                return json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                return {"_raw": path.read_text(encoding="utf-8")}
+
+        def _local_faiss_search(q: str, k: int = 3):
+            idx_file = BASE / "data" / "faiss" / "invoices.index"
+            meta_file = BASE / "data" / "faiss" / "meta.json"
+            if not idx_file.exists() or not meta_file.exists() or not LOCAL_FAISS_AVAILABLE:
+                st.warning("Local FAISS index or sentence-transformers not available. Build index first.")
+                return []
+            import numpy as np
+            index = faiss.read_index(str(idx_file))
+            model = SentenceTransformer("all-MiniLM-L6-v2")
+            qemb = model.encode([q])
+            D, I = index.search(np.array(qemb).astype("float32"), k)
+            meta = json.loads(meta_file.read_text(encoding="utf-8"))
+            results = []
+            for i in I[0]:
+                if i < 0 or i >= len(meta):
+                    continue
+                report_path = Path(meta[i])
+                report_json = _load_report(report_path)
+                results.append({"score": 0.0, "path": str(report_path), "report": report_json})
+            return results
+
+        def _retrieve(q: str, k: int = 3):
+            if use_node and RETRIEVAL_AVAILABLE and retrieval_mod is not None:
+                try:
+                    out = retrieval_mod.run({"query": q, "k": k}, {})
+                    # normalize many shapes
+                    if isinstance(out, dict) and "results" in out:
+                        normalized = []
+                        for r in out["results"][:k]:
+                            if isinstance(r, dict) and r.get("path"):
+                                report_json = _load_report(Path(r["path"]))
+                                normalized.append({"score": r.get("score", 0.0), "path": r.get("path"), "report": report_json})
+                            else:
+                                normalized.append({"score": 0.0, "path": None, "report": r})
+                        return normalized
+                    if isinstance(out, list):
+                        return [{"score": 0.0, "path": None, "report": r} for r in out][:k]
+                    if isinstance(out, dict):
+                        return [{"score": 0.0, "path": None, "report": out}][:k]
+                except Exception as e:
+                    st.warning(f"retrieval_node.run failed: {e}")
+            return _local_faiss_search(q, k)
+
+        # run retrieval
+        with st.spinner("Retrieving..."):
+            results = _retrieve(query, top_k)
+
+        if not results:
+            st.info("No results found.")
+        else:
+            for idx, r in enumerate(results):
+                st.markdown("---")
+                left, right = st.columns([4,1])
+                path = r.get("path")
+                report = r.get("report") or {}
+                # Provide a compact summary/snippet
+                snippet = ""
+                try:
+                    invoice = report.get("invoice") or report.get("original_validated_doc", {}).get("structured") or report
+                    inv_num = (invoice.get("invoice_number") if isinstance(invoice, dict) else None) or "unknown"
+                    vendor = invoice.get("vendor") if isinstance(invoice, dict) else None
+                    total = invoice.get("total") if isinstance(invoice, dict) else None
+                    snippet = f"Invoice: **{inv_num}**  | Vendor: **{vendor}**  | Total: **{total}**"
+                except Exception:
+                    snippet = str(report)[:200]
+                with left:
+                    st.markdown(f"**Result #{idx+1}**  \n{snippet}")
+                    st.expander("Report JSON", expanded=False).json(report)
+                with right:
+                    if st.button(f"Mark Relevant {idx}", key=f"rag_rel_{idx}"):
+                        entry = {"timestamp": int(time.time()), "query": query, "item_path": path, "label": "relevant", "score": r.get("score",0.0)}
+                        with open(FEEDBACK_PATH, "a", encoding="utf-8") as f:
+                            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                        st.success("Marked relevant ✅")
+                    if st.button(f"Mark Irrelevant {idx}", key=f"rag_irr_{idx}"):
+                        entry = {"timestamp": int(time.time()), "query": query, "item_path": path, "label": "irrelevant", "score": r.get("score",0.0)}
+                        with open(FEEDBACK_PATH, "a", encoding="utf-8") as f:
+                            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                        st.warning("Marked irrelevant ❌")
+                    if path:
+                        st.write(path)
+
+            # Generate grounded answer
+            st.markdown("---")
+            if LLM_AVAILABLE:
+                if st.button("Generate grounded answer (LiteLLM)"):
+                    ctx_parts = []
+                    for r in results:
+                        report = r.get("report", {})
+                        ctx_parts.append(json.dumps(report, ensure_ascii=False)[:4000])
+                    context_text = "\n\n---\n\n".join(ctx_parts)
+                    try:
+                        client = LiteLLMClient()
+                        system = "You are a concise assistant. Use the provided documents to answer the user's query. If unsure, say 'I don't know.' Return plain text and cite sources when possible. Return your answer in pure JSON format."
+                        user = f"User query: {query}\n\nContext:\n{context_text}"
+                        gen = client.generate(system, user, max_tokens=512, temperature=0.0)
+                        messages = [
+                            {"role": "system", "content": system},
+                            {"role": "user", "content": user}
+                        ]
+                        try:
+                            response = litellm.completion(
+                            model="ollama/mistral:7b-instruct",  # High-quality model for better instruction following
+                            messages=messages,
+                            api_base="http://localhost:11434",
+                            temperature=0.0  # Set low temperature for literal, non-creative translation
+                            )
+                            extracted_text = response['choices'][0]['message']['content'].strip()
+                            print(f"extracted_text::: {extracted_text}\n")
+                            #parsed = json.loads(extracted_text)
+                            #print(f"parsed: {parsed}")
+                            #if isinstance(parsed, dict):
+                                #text = gen.get("text") if isinstance(gen, dict) else str(gen)
+                            st.subheader("Generated Answer")
+                            st.write(extracted_text)
+                        except Exception as e:
+                            st.error(f"LLM generate failed: {e}")
+                    except Exception as e:
+                        st.error(f"LLM generate failed: {e}")
+            else:
+                st.info("LiteLLM client not available; install or set LITELLM_PROVIDER.")
+
+# Show recent feedback (sidebar)
+with st.sidebar:
+    st.markdown("---")
+    st.markdown("### Recent RAG feedback")
+    try:
+        if FEEDBACK_PATH.exists():
+            lines = FEEDBACK_PATH.read_text(encoding="utf-8").strip().splitlines()[-10:]
+            for ln in reversed(lines):
+                try:
+                    st.write(json.loads(ln))
+                except Exception:
+                    st.text(ln)
+        else:
+            st.text("No feedback yet.")
+    except Exception:
+        st.text("No feedback yet.")

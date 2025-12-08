@@ -12,6 +12,7 @@ required_fields:
   header:
     - invoice_no
     - invoice_date
+    - po_number
     - vendor_id
     - currency
     - total_amount
@@ -28,6 +29,7 @@ required_fields:
 data_types:
   invoice_no: str
   invoice_date: date
+  po_number: str
   vendor_id: str
   currency: str
   total_amount: float

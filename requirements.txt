@@ -18,3 +18,8 @@ scikit-learn
 python-multipart
 langdetect
 langgraph
+transformers
+accelerate
+safetensors
+litellm
+tesseract

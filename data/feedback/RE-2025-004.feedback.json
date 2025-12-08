@@ -1,0 +1,24 @@
+{
+  "invoice_id": "RE-2025-004",
+  "status": "APPROVED",
+  "reviewer": "alice@example.com",
+  "timestamp": "2025-12-04T15:41:57.969374",
+  "note": "",
+  "edited_invoice": {
+    "invoice_number": "RE-2025-004",
+    "date": "",
+    "vendor": "Hafen Logistics GmbH",
+    "currency": "EUR",
+    "total": "1760.00€",
+    "lines": [
+      {
+        "item_code": "",
+        "description": "",
+        "qty": 0,
+        "unit_price": 0.0,
+        "total": 0.0
+      }
+    ]
+  },
+  "original_report": "/Users/someswararaomaradani/IdeaProjects/InvoiceAuditor/data/reports/RE-2025-004.report.json"
+}

@@ -5,5 +5,64 @@
     "reviewer": "alice@example.com",
     "time": "2025-11-26T05:14:30.574729",
     "feedback_path": "/Users/someswararaomaradani/IdeaProjects/InvoiceAuditor/data/feedback/INV-0001.feedback.json"
+  },
+  {
+    "invoice_id": "RE-2025-004",
+    "action": "re_run_validation",
+    "reviewer": "alice@example.com",
+    "time": "2025-12-04T10:39:06.901327",
+    "result": {
+      "totals_check": [],
+      "business_issues": [
+        "business_validation_not_available"
+      ]
+    }
+  },
+  {
+    "invoice_id": "RE-2025-004",
+    "action": "reject",
+    "reviewer": "alice@example.com",
+    "time": "2025-12-04T10:39:18.853524",
+    "feedback_path": "/Users/someswararaomaradani/IdeaProjects/InvoiceAuditor/data/feedback/RE-2025-004.feedback.json"
+  },
+  {
+    "invoice_id": "RE-2025-004",
+    "action": "manual_review",
+    "reviewer": "alice@example.com",
+    "time": "2025-12-04T10:39:28.906694",
+    "feedback_path": "/Users/someswararaomaradani/IdeaProjects/InvoiceAuditor/data/feedback/RE-2025-004.feedback.json"
+  },
+  {
+    "invoice_id": "RE-2025-004",
+    "action": "approve",
+    "reviewer": "alice@example.com",
+    "time": "2025-12-04T10:39:35.879033",
+    "feedback_path": "/Users/someswararaomaradani/IdeaProjects/InvoiceAuditor/data/feedback/RE-2025-004.feedback.json"
+  },
+  {
+    "invoice_id": "RE-2025-004",
+    "action": "approve",
+    "reviewer": "alice@example.com",
+    "time": "2025-12-04T15:41:58.022587",
+    "feedback_path": "/Users/someswararaomaradani/IdeaProjects/InvoiceAuditor/data/feedback/RE-2025-004.feedback.json"
+  },
+  {
+    "invoice_id": "RE-2025-004",
+    "action": "overwrite_report",
+    "reviewer": "alice@example.com",
+    "time": "2025-12-04T15:42:04.240535",
+    "report_path": "/Users/someswararaomaradani/IdeaProjects/InvoiceAuditor/data/reports/RE-2025-004.report.json"
+  },
+  {
+    "invoice_id": "RE-2025-004",
+    "action": "re_run_validation",
+    "reviewer": "alice@example.com",
+    "time": "2025-12-04T15:42:24.744464",
+    "result": {
+      "totals_check": [],
+      "business_issues": [
+        "biz_module_present_but_no_check_with_erp"
+      ]
+    }
   }
 ]
