@@ -78,6 +78,9 @@ def extract_data(state: InvoiceProcessingState) -> Dict:
             text = extract_text_from_image(path)
         elif path.suffix.lower() == '.txt':
             text = path.read_text(encoding="utf-8", errors="ignore")
+        elif path.suffix.lower() == '.json':
+            with open(file_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
         else:
             AUDITOR_LOGGER.info(f"Skipping unrecognized file type:: {path}")
         AUDITOR_LOGGER.info(f"raw text: {text}")
@@ -193,7 +196,8 @@ def translate_data(state: InvoiceProcessingState) -> Dict:
 def extract_structured(input_text: str) -> Dict[str, Any]:
         system_prompt = """You are an invoice extraction assistant. Extract invoice fields as JSON: 
         invoice_number, po_number, date, vendor, vendor_id, currency, total, taxes, line_items (list of {item_code, description, qty, unit_price, total}). 
-        if unable to extract any of the fileds, mark it as "None".
+        You neeed to fetch the value for currency as currency_name(currency_symbol)
+        if unable to extract any of the fields, skip returning in json".
         Return pure JSON only."""
         user_prompt = (f"input json: {input_text}\n")
         messages = [
@@ -250,6 +254,7 @@ def load_rules(path: str) -> Dict[str, Any]:
             return yaml.safe_load(f)
     except Exception as e:
         raise FileNotFoundError(f"Failed to load rules.yaml from {path}: {e}")
+        return {}
 
 def deterministic_validation(translated_data: Dict, rules: Dict) -> List[str]:
     """Performs non-LLM based (reliable) checks."""
@@ -283,20 +288,15 @@ def deterministic_validation(translated_data: Dict, rules: Dict) -> List[str]:
 def validate_invoice_data(state: InvoiceProcessingState) -> Dict:
     """Performs validation checks using Python for math/files and LLM for complex logic."""
     AUDITOR_LOGGER.info("Node: validation_agent | Starting validation Agent:")
-    try:
-        rules = load_rules(CONFIG_PATH)
-    except FileNotFoundError as e:
-        return {"errors": state['errors'] + [str(e)]}
-
+    rules = load_rules(CONFIG_PATH)
+    rules_yaml_str = yaml.dump(rules)
     translated_data = state.get('translated_data', {})
     AUDITOR_LOGGER.info(f"Node: validation_agent | translated_data:{translated_data}")
     # --- STEP 1: Run Deterministic Checks (Python Logic) ---
     #python_issues = deterministic_validation(translated_data, rules)
     #AUDITOR_LOGGER.info(f"Node: validation_agent | python_issues:{python_issues}")
     # --- STEP 2: Use LLM for Completeness and Final JSON Formatting ---
-    
-    # Prepare LLM Input
-    rules_yaml_str = yaml.dump(rules)
+
     
     system_prompt = """
     You are an expert Invoice Validation Agent. Your task is to check the provided invoice data against the given rules and calculations.
@@ -338,7 +338,8 @@ def validate_invoice_data(state: InvoiceProcessingState) -> Dict:
         data = json.loads(structured_text_str)
         AUDITOR_LOGGER.info(f"Node: validation_agent | validation completed. data: {data}")
         # 2. Access the values using their keys
-        validation_results = data["validation_results"]
+        validation_results = data.get("validation_results", {}) if isinstance(data, dict) else {}
+        
         validation_issues = []
         for i in data.get('issues', []):
                 validation_issues.append(i)
@@ -353,7 +354,7 @@ def validate_invoice_data(state: InvoiceProcessingState) -> Dict:
 
     except Exception as e:
         error_msg = f"Validation LLM Error via LiteLLM: {e}"
-        AUDITOR_LOGGER.info(f"Validation Error: {error_msg}")
+        AUDITOR_LOGGER.error(error_msg)
         return {"validation_results": {},  "validation_issues": [], "validation_rules_yaml": rules_yaml_str, "errors": state['errors'] + [error_msg]}
 
 '''def validate_invoice_data(state: InvoiceProcessingState) -> Dict:
@@ -382,7 +383,7 @@ def fetch_po(po_number: str) -> Optional[Dict[str, Any]]:
         else:
             return None
     except Exception as e:
-        print("[demo] ERROR:", e)
+        AUDITOR_LOGGER.error(f"Node: busiess_validation_agent | https response error: {e}")
         raise
 
 
@@ -401,7 +402,7 @@ def fetch_vendor(vendor_id: str) -> Optional[Dict[str, Any]]:
         print("[demo] ERROR:", e)
         raise
 
-def business_validation_llm_call(structured: Dict[str, Any], erp_json, validation_type: str) -> Dict[str, Any]:
+def business_validation_llm_call(structured: Dict[str, Any], erp_json, validation_type: str) :
         #system = """You are a forensic invoice auditor. Evaluate this structured invoice JSON for likely errors and return JSON: 
         #{issues: [{code, field, severity, message}], suggestion: 'Approve|Manual Review|Reject'}. Return pure JSON only"""
         system_prompt_po = """You are an expert finance validation assistant.\n
@@ -411,7 +412,8 @@ def business_validation_llm_call(structured: Dict[str, Any], erp_json, validatio
             Evaluate quantity_difference_percent by comparing quantities in invoice against ERP data.
             Evaluatae tax_difference_percent by comparing taxes in invoice against ERP data.
             Evalute disscrepancies in totals, prices, quantities in invoice against ERP data. if discrepancies > 5%, return in output json
-            return JSON: {data_differences: {price_difference_percent, quantity_difference_percent, tax_difference_percent}, discrepancies: [{field, total/quantity, discrepancy in %}], issues: [{field, severity, message}]. Categorize severity High/Medium/Low based on the impact. Return pure JSON only"""
+            return JSON: {data_differences: {price_difference_percent, quantity_difference_percent, tax_difference_percent}, discrepancies: [{field, total/quantity, discrepancy in %}], issues: [{field, severity, message}]. Categorize severity High/Medium/Low based on the impact. 
+            Only output the JSON object. Do NOT include any explanatory text"""
         system_prompt_vendor = """You are an expert finance validation assistant.\n
             You will compare vendor data and its corresponding ERP data for vendor_id, vendor_name, country, currency.
             return JSON: {issues: [{field, severity, message}]. Categorize severity High/Medium/Low based on the impact. Return pure JSON only"""
@@ -449,7 +451,7 @@ def business_validation_llm_call(structured: Dict[str, Any], erp_json, validatio
             return res
         except Exception as e:
             error_msg = f"Validation LLM Error via LiteLLM: {e}"
-            AUDITOR_LOGGER.info(f"Validation Error: {error_msg}")
+            AUDITOR_LOGGER.error(f"Validation Error: {error_msg}")
             return None
         
 def validate_business_logic(state: InvoiceProcessingState) -> Dict:
@@ -460,15 +462,14 @@ def validate_business_logic(state: InvoiceProcessingState) -> Dict:
     business_issues = []
 
     po_number = struct.get("po_number") or struct.get("purchase_order") or struct.get("po")
-
-    vendor_id = struct["vendor_id"]
+    vendor_id = struct.get("vendor_id")
     data_differences_against_erp = {}
     discrepancies_details = []
     # Fetch PO if present
     po_record = None
     if po_number:
         po_record = fetch_po(str(po_number))
-        print(f"po_record:::{po_record}")
+        AUDITOR_LOGGER.info(f"Node: business validation_agent | PO Record fetched:{po_record}")
         if po_record is None:
             business_issues.append({
                     "field": "po_number",
@@ -478,26 +479,25 @@ def validate_business_logic(state: InvoiceProcessingState) -> Dict:
         else:
             try:
                 eval_res = business_validation_llm_call(struct, po_record, 'po_validation')
+                AUDITOR_LOGGER.info(f"Node: business validation_agent | eval_res invoice:{eval_res}")
                 data = json.loads(eval_res)
+                AUDITOR_LOGGER.info(f"Node: business validation_agent | data invoice:{data}")
                 data_differences_against_erp = data["data_differences"]
                 for i in data.get('issues', []):
                     business_issues.append(i)
+                AUDITOR_LOGGER.info(f"Node: business validation_agent | business_issues:{business_issues}")
                 for i in data.get('discrepancies', []):
                     discrepancies_details.append(i)
+            
             except Exception as e:
                 error_msg = f"Validation LLM Error via LiteLLM: {e}"
-                AUDITOR_LOGGER.info(f"Validation Error: {error_msg}")
+                AUDITOR_LOGGER.error(error_msg)
 
         # Fetch vendor if present
     vendor_record = None
-    if vendor_id:
-        if vendor_id == 'None':
-            business_issues.append({
-                        "field": "vendor_id",
-                        "severity": "MED",
-                        "message": f"Vendor ID not provided in invoice"
-            })
-        else:         
+    AUDITOR_LOGGER.info(f"Node: business validation_agent | vendor_id in invoice:{vendor_id}")
+    if vendor_id is not None:   
+            AUDITOR_LOGGER.info(f"Node: business validation_agent | inside vendor_id in invoice:{vendor_id}")
             vendor_record = fetch_vendor(str(vendor_id))
             if vendor_record is None:
                 business_issues.append({
@@ -509,13 +509,14 @@ def validate_business_logic(state: InvoiceProcessingState) -> Dict:
             
                 try:
                     eval_res = business_validation_llm_call(struct, vendor_record, 'vendor_validation')
+                    AUDITOR_LOGGER.info(f"eval_res Error: {eval_res}")
                     data = json.loads(eval_res)
                     for i in data.get('issues', []):
                         business_issues.append(i)
                 except Exception as e:
                     error_msg = f"Validation LLM Error via LiteLLM: {e}"
-                    AUDITOR_LOGGER.info(f"Validation Error: {error_msg}")
-    AUDITOR_LOGGER.info(f"Node: busiess_validation_agent | execution completed: {business_issues}\n {data_differences_against_erp}")
+                    AUDITOR_LOGGER.ERROR(error_msg)
+    AUDITOR_LOGGER.info(f"Node: busiess_validation_agent | execution completed: business_issues: {business_issues}\n data_differences_against_erp:{data_differences_against_erp}\n discrepancies_details: {discrepancies_details}")
     return {"data_differences_against_erp": data_differences_against_erp, "business_validation_issues": business_issues, "discrepancies_details": discrepancies_details}
    
 
@@ -547,24 +548,28 @@ os.makedirs(REPORTS_FOLDER, exist_ok=True) # Ensure the directory exists
 # The Reporting Agent function
 def reporting(state: InvoiceProcessingState) -> Dict:
     # 1. Determine final recommendation (logic based on validation_results)
+    invoice_data = state['translated_data']
     translation_confidence = state['translation_confidence']
     rules = state['validation_rules_yaml']
     data_differences_against_erp = state['data_differences_against_erp']
     discrepancies = state["discrepancies_details"]
     system_prompt = """You are an expert report generation assistant. Your task is to check the provid recommnedation and .
         =**RULES & INSTRUCTIONS:**\n
-            You will compare data_differences_against_erp json against tolerances field in rules yaml file
+            You will compare data_differences_against_erp json against tolerances field in rules
             **Use below guidelines to generate Recommendation**
                 - if totals mismatch beyond tolerance, mark recommendation as manual_review 
-                - if currency mismatch, mark recommendation as reject
-                - if no discrepancies and translation confidence ≥ 0.95, mark recommendation as Approve
-            return JSON: {Recommendation: Return pure JSON only"""
+                - if the currency in invoice data is not listed in accepted_currencies in rules, mark recommendation as rejected
+                - if no discrepancies and translation confidence ≥ 0.95, mark recommendation as Approved
+            return {Recommendation: Return pure JSON only\n
+            Only output the JSON object. Do NOT include any explanatory text, markdown formatting."""
    
 
         # ------------------------------------------------------
         # User message using placeholders
         # ------------------------------------------------------
     user_prompt = (
+        "Here is the invoice data\n"
+        "{invoice_data}\n\n"
         "Here is the validaion rules yaml:\n"
         "{rules}\n\n"
         "Here is the translation_confidence:\n"
@@ -574,7 +579,7 @@ def reporting(state: InvoiceProcessingState) -> Dict:
         "Here is the discrepancies list:\n"
         "{discrepancies}\n\n"
         "Analyze the data and produce the JSON response."
-        ).format(rules=rules, translation_confidence=translation_confidence, data_differences_against_erp=data_differences_against_erp, discrepancies=discrepancies)
+        ).format(invoice_data=invoice_data,rules=rules, translation_confidence=translation_confidence, data_differences_against_erp=data_differences_against_erp, discrepancies=discrepancies)
 
         
     messages = [
@@ -591,9 +596,26 @@ def reporting(state: InvoiceProcessingState) -> Dict:
         temperature=0.0  # Set low temperature for literal, non-creative translation
         )
         res = response['choices'][0]['message']['content'].strip()
-        AUDITOR_LOGGER.info(f"Node: busiess_validation_agent | LLM call completed {res}")
+        AUDITOR_LOGGER.info(f"Node: reporting_agent | LLM call completed {res}")
         data = json.loads(res)
         recommendation = data["Recommendation"]
+        file_path_obj = Path(state["file_path"])
+        meta_path_pathlib = file_path_obj.with_suffix(".meta.json")
+
+        # 2. Using the 'os.path' module
+        # os.path.splitext splits the path into (root, ext)
+        base_name, _ = os.path.splitext(state["file_path"])
+        meta_path_os = base_name + ".meta.json"
+        AUDITOR_LOGGER.info(f"Node: busiess_validation_agent | metadata file name {meta_path_os}")
+        meta_data = None
+        try:
+            with open(meta_path_os, 'r', encoding='utf-8') as f:
+                meta_data = json.load(f)
+
+        except FileNotFoundError as e:
+            AUDITOR_LOGGER.info(f"Metadata file Error: {e}")
+        except json.JSONDecodeError as e:
+            AUDITOR_LOGGER.info(f"Error: Failed to parse JSON in {meta_path_os}: {e}")
 
         # 2. Compile the Final Report Dictionary
         final_report = {
@@ -603,7 +625,8 @@ def reporting(state: InvoiceProcessingState) -> Dict:
             "validation_issues": state['validation_issues'],
             "business_validation_issues": state['business_validation_issues'],
             "discrepancies_details": state['discrepancies_details'],
-            "translation_confidence": state['translation_confidence']
+            "translation_confidence": state['translation_confidence'],
+            "meta_data": meta_data
         }
 
         # 3. Save the JSON Report
@@ -612,7 +635,7 @@ def reporting(state: InvoiceProcessingState) -> Dict:
         
         try:
             with open(report_path, 'w', encoding='utf-8') as f:
-                json.dump(final_report, f, indent=4)
+                json.dump(final_report, f, indent=2, ensure_ascii=False)
             
             logging.info(f"Report saved successfully to: {report_path}")
             
@@ -621,18 +644,12 @@ def reporting(state: InvoiceProcessingState) -> Dict:
             state['errors'].append(f"Reporting Error: Failed to save file.")
             
         # 4. Update the state
-        return {"report_path": report_path, "recommendation": recommendation, "status": "REPORTED"}
+        return {"report_path": report_path, "recommendation": recommendation, "status": "REPORTED", "invoice_meta_data": meta_data}
     except Exception as e:
-        error_msg = f"REport generationerror via LiteLLM: {e}"
-        AUDITOR_LOGGER.info(f"Report generation error: {error_msg}")
+        error_msg = f"Report generationerror via LiteLLM: {e}"
+        AUDITOR_LOGGER.error(error_msg)
         return None
-
-
-def rag_indexing(state: InvoiceProcessingState) -> Dict:
-    # Logic: Chunk invoice text and report, embed, and store in FAISS.
-    print("--- 7. Indexing for RAG...")
-    return {"status": "INDEXED"}
-
+    
 def decide_to_review(state: InvoiceProcessingState) -> str:
     """Conditional edge logic after initial validation."""
     AUDITOR_LOGGER.info(f"Report generation errordecide_to_review: {state['validation_results']}")

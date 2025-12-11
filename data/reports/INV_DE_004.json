@@ -1,39 +1,49 @@
 {
-    "invoice_file": "INV_DE_004.pdf",
-    "recommendation": "Manual Review",
-    "extracted_data": "HafenLogistik GmbH\nAm Kai 55, Hamburg, Deutschland\nRechnungsnummer: RE-2025-004\nRechnungsdatum: 02.05.2025\nBestellnummer: PO-1004\n-------------------------------------------------\nArtikelcode | Beschreibung | Menge | Preis | Gesamt\n-------------------------------------------------\nSKU-301 | Transportkisten | 40 | 25.00\u20ac| 1000.00\u20ac\nSKU-302 | Sicherheitswesten | 60 | 10.00\u20ac| 600.00\u20ac\n-------------------------------------------------\nZwischensumme: 1600.00\u20ac\nMwSt (10%): 160.00\u20ac\nGesamtbetrag: 1760.00\u20ac\n-------------------------------------------------\n",
-    "translated_data": {
-        "Company Name": "HafenLogistik GmbH",
-        "Address": "Am Kai 55, Hamburg, Germany",
-        "Invoice Number": "RE-2025-004",
-        "Invoice Date": "02.05.2025",
-        "Purchase Order Number": "PO-1004",
-        "Items": [
-            {
-                "Item Code": "SKU-301",
-                "Description": "Transportkisten",
-                "Quantity": "40",
-                "Price per Unit": "25.00\u20ac",
-                "Total": "1000.00\u20ac"
-            },
-            {
-                "Item Code": "SKU-302",
-                "Description": "Sicherheitswesten",
-                "Quantity": "60",
-                "Price per Unit": "10.00\u20ac",
-                "Total": "600.00\u20ac"
-            }
-        ],
-        "Subtotal": "1600.00\u20ac",
-        "VAT (10%)": "160.00\u20ac",
-        "Total Amount": "1760.00\u20ac"
-    },
-    "validation_summary": {
-        "data_valid": true,
-        "completeness_ok": true,
-        "erp_match": false,
-        "price_discrepancy": true
-    },
-    "errors": [],
-    "translation_confidence": 1.0
+  "invoice_file": "INV_DE_004.pdf",
+  "recommendation": "Approved",
+  "translated_data": {
+    "invoice_number": "RE-2025-004",
+    "po_number": "PO-1004",
+    "date": "02.05.2025",
+    "vendor": "HafenLogistik GmbH",
+    "vendor_id": null,
+    "currency": "Euro (€)",
+    "total": "1760.00€",
+    "taxes": "VAT (10%): 160.00€",
+    "line_items": [
+      {
+        "item_code": "SKU-301",
+        "description": "Transportkisten",
+        "qty": "40",
+        "unit_price": "25.00€",
+        "total": "1000.00€"
+      },
+      {
+        "item_code": "SKU-302",
+        "description": "Sicherheitswesten",
+        "qty": "60",
+        "unit_price": "10.00€",
+        "total": "600.00€"
+      }
+    ]
+  },
+  "validation_issues": [
+    {
+      "field": "vendor_id",
+      "severity": "Medium",
+      "message": "The field 'vendor_id' is required but missing in the invoice data."
+    }
+  ],
+  "business_validation_issues": [],
+  "discrepancies_details": [],
+  "translation_confidence": 1.0,
+  "meta_data": {
+    "sender": "rechnung@hafenlogistik.de",
+    "subject": "Rechnung RE-2025-004 - Bestellung PO-1004",
+    "received_timestamp": "2025-05-02T11:00:00Z",
+    "language": "de",
+    "attachments": [
+      "INV_DE_004.docx"
+    ]
+  }
 }

@@ -3,6 +3,8 @@
 from langgraph.graph import StateGraph, END
 from state import InvoiceProcessingState # Import the state definition
 from logger_config import AUDITOR_LOGGER
+from rag_agents.indexing_agent import rag_indexing
+
 from agents import (
     ingest_invoice, 
     extract_data, 
@@ -10,7 +12,6 @@ from agents import (
     validate_invoice_data,
     validate_business_logic,
     reporting,
-    rag_indexing,
     decide_to_review,
     decide_final_action,
     decide_to_translate

@@ -1,6 +1,7 @@
 import time
 import os, sys
 import uvicorn
+from pathlib import Path
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
@@ -47,7 +48,10 @@ class InvoiceHandler(FileSystemEventHandler):
         if not event.is_directory and not os.path.basename(event.src_path).startswith('.'):
             # Wait briefly to ensure the file is fully written before processing
             time.sleep(1) 
-            trigger_invoice_workflow(event.src_path)
+            file_path = event.src_path
+            path = Path(str(file_path))
+            if path.suffix.lower() in ['.pdf', '.docx', '.png', '.jpg', '.jpeg', '.tiff', '.bmp', '.txt']:
+                trigger_invoice_workflow(event.src_path)
 
 # --- Service Initialization ---
 if __name__ == "__main__":

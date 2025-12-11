@@ -24,11 +24,15 @@ class InvoiceProcessingState(TypedDict):
     # Validation & Auditing
     validation_results: Dict # Stores results from both Data and Business agents
     validation_issues: List[str]
+    validation_rules_yaml: str
     business_validation_results: Dict
-    business_validation_issues: Dict
+    data_differences_against_erp: Dict
+    business_validation_issues: List[str]
+    discrepancies_details: List[str]
     audit_score: float # Overall compliance score
     
     # Reporting & RAG
+    invoice_meta_data: str
     report_path: str
     recommendation: Literal["Approve", "Manual Review", "Reject"]
     human_feedback: str # Captured by Streamlit
